@@ -10,10 +10,18 @@
       "Description": "Password for Pod. User defined or use value provided in DevNet Sandbox email.",
       "Type": "String"
     },
-    "DuoSecret": {
-      "Description": "Secret used to configure Duo. *Must* use value provided in DevNet Sandbox email.",
+    "DuoIkey": {
+      "Description": "Duo Web SDK application's integration key. *Must* use value provided in DevNet Sandbox email.",
       "Type": "String"
     },
+		"DuoSkey": {
+			"Description": "Duo Web SDK application's secret key. *Must* use value provided in DevNet Sandbox email.",
+			"Type": "String"
+		},
+		"DuoHost": {
+			"Description": "Duo Web SDK API hostname. *Must* use value provided in DevNet Sandbox email.",
+			"Type": "String"
+		},
     "SwcSecret": {
       "Description": "Secret used for Stealthwatch Cloud Kubernetes agents. *Must* use value provided in DevNet Sandbox email.",
       "Type": "String"
@@ -403,12 +411,24 @@
         "Ref": "PodPassword"
       }
     },
-    "DuoSecret": {
-      "Description": "Cisco App-First Sec secret to configure Duo",
+    "DuoIkey": {
+      "Description": "Duo Web SDK application's integration key",
       "Value": {
-        "Ref": "DuoSecret"
+        "Ref": "DuoIkey"
       }
     },
+		"DuoSkey": {
+			"Description": "Duo Web SDK application's secret key",
+			"Value": {
+				"Ref": "DuoSkey"
+			}
+		},
+		"DuoHost": {
+			"Description": "Duo Web SDK API hostname",
+			"Value": {
+				"Ref": "DuoHost"
+			}
+		},
     "TetAgentBucket": {
       "Description": "Cisco App-First Sec S3 Bucket for Tetration agent",
       "Value": {

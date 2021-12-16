@@ -250,11 +250,6 @@ spec:
               secretKeyRef:
                 name: duo
                 key: skey
-          - name: DUO_AKEY
-            valueFrom:
-              secretKeyRef:
-                name: duo
-                key: akey
           - name: DUO_API_HOSTNAME
             valueFrom:
               secretKeyRef:

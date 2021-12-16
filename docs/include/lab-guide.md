@@ -2984,7 +2984,6 @@ You'll instrument Duo MFA into the Sock Shop so that users of the application mu
 
 #### Steps
 
-* [Set Duo Admin Credentials](#set-duo-admin-credentials)
 * [Instrument the Sock Shop with Duo](#instrument-the-sock-shop-with-duo)
   * [Validate authentication without MFA](#validate-authentication-without-mfa)
   * [Update source with Duo MFA](#update-source-with-duo-mfa)
@@ -2992,35 +2991,6 @@ You'll instrument Duo MFA into the Sock Shop so that users of the application mu
   * [Make Duo secrets available to Sock Shop](#make-duo-secrets-available-to-sock-shop)
   * [Deploy updated Sock Shop with Duo](#deploy-updated-sock-shop-with-duo)
   * [Validate authentication with Duo MFA](#validate-authentication-with-duo-mfa)
-
-
-##### Set Duo Admin Credentials
-
-We're using a pre-defined email of _${POD_NAME}@cisco.com_ to give access to the Duo Admin portal.
-
-1. Return to the Cloud9 environment and select a terminal tab in the bottom right pane
-
-2. Use the _duoconf_ script to configure the Duo Admin portal with your phone number for multi-factor authentication (MFA) in addition to transparenly setting your admin password to _${POD_PASSWORD}_. The phone number you provide will receive SMS messages, so normal messaging costs might apply.
-
-    > **NOTE**
-    >
-    > The script will validate the phone number format and if it's deemed invalid, you'll be prompted to provide it again. [E.164 format](https://www.google.com/search?q=e.164%20format) for this number is required.
-
-    ###### Command
-
-    ```
-    duoconf
-    ```
-
-    ###### Output
-
-    ```
-    Enter your phone numbner in E.164 format (example: +1 408 555 5555):
-    ```
-
-3. Confirm you can log into the Duo Admin management interface
-
-    > [https://admin.duosecurity.com/](https://admin.duosecurity.com/)
 
 
 ##### Instrument the Sock Shop with Duo
@@ -3403,7 +3373,7 @@ You'll store four secrets in Kubernetes that will be available to the front-end 
 
     <img src="https://app-first-sec.s3.amazonaws.com/lab-guide.assets/image-20191017202329590.png" alt="image-20191017202329590" style="zoom:50%;" />
 
-5. Use the _duosecrets_ helper script to create a Kubernetes secret object with the values from the Duo Web SDK Application you opened in a previous step. You'll need to move back and forth between the Duo administrative portal and the Cloud9 IDE terminal as you copy and paste values.
+5. Use the _duosecrets_ helper script to create a Kubernetes secret object with the values from the Duo Web SDK Application that was already created for you.
 
     ###### Command
 
@@ -3414,18 +3384,6 @@ You'll store four secrets in Kubernetes that will be available to the front-end 
     ###### Output
 
     ```
-    Integration key:
-    123abc123abc123abc123abc123abc
-
-    Secret key:
-    123abc123abc123abc123abc123abc
-
-    API hostname:
-    api-123abc.duosecurity.com
-
-    Application key (auto-generated):
-    123abc123abc123abc123abc123abc
-
     Kubernetes secret object YAML:
     apiVersion: v1
     kind: Secret
@@ -3437,7 +3395,6 @@ You'll store four secrets in Kubernetes that will be available to the front-end 
      ikey: MTIzYWJjMTIzYWJjMTIzYWJjMTIzYWJjMTIzYWJjCg==
      skey: MTIzYWJjMTIzYWJjMTIzYWJjMTIzYWJjMTIzYWJjCg==
      api_hostname: MTIzYWJjMTIzYWJjMTIzYWJjMTIzYWJjMTIzYWJjCg==
-     akey: MTIzYWJjMTIzYWJjMTIzYWJjMTIzYWJjMTIzYWJjCg==
 
     Creating Kubernetes object using 'envsubst <${DOLLAR_SIGN}LAB/duo/duo-secrets.yaml | kubectl apply -f -':
     secret/duo configured
@@ -3455,7 +3412,7 @@ You'll store four secrets in Kubernetes that will be available to the front-end 
 
     ```
     NAME   TYPE     DATA   AGE
-    duo    Opaque   4      7d22h
+    duo    Opaque   3      7d22h
     ```
 
     > **TIP**
