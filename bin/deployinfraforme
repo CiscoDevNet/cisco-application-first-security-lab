@@ -1,0 +1,231 @@
+#!/bin/bash
+
+# Copyright (c) 2020 Cisco and/or its affiliates.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+#create EKS cluster
+echo " "
+echo "###########################################################################"
+echo "## Step 1: We will create an EKS cluster in the Spoke VPC now."
+echo "###########################################################################"
+eksctl get clusters app-first-sec &> /dev/null
+if [ $? -eq 0 ]; then
+    echo $(eksctl get clusters app-first-sec)
+    echo " "
+    echo "-----------------------------------------------"
+    echo "EKS Cluster is already provisioned!!!"
+    echo "-----------------------------------------------"
+else
+    echo "This single step begins a complex process driven through CloudFormation."
+    echo "This will take approximately 25 minutes to complete given the shear number of steps to prepare all of the AWS services."
+    echo "-----------------------------------------------------------------------------------------------------------------------"
+    eksctl create cluster --config-file $HOME/environment/lab/aws/eks-cluster.yaml
+    echo " "
+    echo "-----------------------------------------------"
+    echo "EKS Cluster is created!"
+    echo "-----------------------------------------------"
+fi
+echo " "
+
+#Deploy Sock Shop application
+echo "###########################################################################"
+echo "## Step 2: Now, we will deploy the Sock Shop application to the EKS cluster."
+echo "###########################################################################"
+kubectl apply -f $HOME/environment/lab/sock-shop/sock-shop-elb.yaml
+echo " "
+echo "---------------------------------------------------------"
+echo "Sock Shop demo application is deployed to the EKS Cluster."
+echo "---------------------------------------------------------"
+echo " "
+
+# (TBD) Mark your EKS cluster private and Allow SG communitcation from outside 
+
+#Login to Gitlab UI and Create Personal Access Token for api/git calls
+sleep 2
+echo "###########################################################################"
+echo "## Step 3: Create Front End microservice project on the private GitLab Instance"
+echo "###########################################################################"
+echo "--------------------------GitLab Credentials-------------------------------"
+echo "Username: root"
+echo "$(ssh -i ~/.ssh/$AWS_KEYPAIR_NAME ubuntu@$AWS_GITLAB_IP 'sudo grep Password: /etc/gitlab/initial_root_password')"
+echo "---------------------------------------------------------------------------"
+echo -e "Go to link \e[32mhttp://$AWS_GITLAB_FQDN/-/profile/personal_access_tokens\e[0m (Use the credentials above to login)"
+echo "Generate a Private Access Token by adding api and write_repository scopes."
+echo "We will use this token to authenticate to your private GitLab Instance to create the project for front-end sock shop microservice."
+echo "---------------------------------------------------------------------------------------"
+echo "Enter the Private Access Token:"
+read GITLAB_TOKEN
+
+#Create the Gitlab project
+res=$(curl --write-out "%{http_code}\n" --header "Private-Token: $GITLAB_TOKEN" -X POST "http://$AWS_GITLAB_FQDN/api/v4/projects?name=Front-End" --output /dev/null --silent)
+if [ $res1=="201" ]; then
+  echo " "
+  echo "--------------------------------------"
+  echo "Gitlab Project - Front-End is created "
+  echo "--------------------------------------"
+  echo " "
+else
+  echo "Failed to create Sock-Shop Project"
+  exit 1
+fi
+
+# Use Gitlab runner registration token to register a runner
+sleep 2
+echo "###########################################################################"
+echo "## Step 4: Register the GitLab Runner to the Front End Gitlab project."
+echo "###########################################################################"
+echo -e "Go to link \e[32mhttp://$AWS_GITLAB_FQDN/root/Front-End/-/settings/ci_cd\e[0m"
+echo "Expand the Runners section and copy the registration token."
+echo "We will register a Runner to your private GitLab instance to run the CI/CD pipeline jobs."
+echo "--------------------------------------------------------------------------------------------------"
+echo "Enter the Gitlab Runner Registration token:"
+read RUNNER_TOKEN
+
+#Register a Gitlab runner for CICD pipeline
+ssh -i ~/.ssh/$AWS_KEYPAIR_NAME ubuntu@$AWS_GITLAB_IP << EOF
+sudo gitlab-runner register \
+--non-interactive \
+--url "http://$AWS_GITLAB_FQDN/" \
+--registration-token $RUNNER_TOKEN \
+--executor "docker" \
+--docker-image alpine:3.14.0 \
+--description "docker-runner" \
+--docker-privileged \
+--docker-volumes "/var/run/docker.sock:/var/run/docker.sock" \
+--tag-list "docker"
+EOF
+echo " "
+echo "------------------------------------------------------------"
+echo "Gitlab Runner for CI/CD pipeline should be registered now!"
+echo "------------------------------------------------------------"
+echo " "
+
+#Add AWS environment variables for pipeline
+sleep 2
+echo "###########################################################################"
+echo "## Step 5: Add CI/CD environment variables to the Front End Gitlab project."
+echo "###########################################################################"
+echo "Now we need to add some CI/CD variables to be used by CI/CD pipeline jobs."
+echo "Gitlab will use these variables to push the new container images to ECR repository and then deploy them to EKS cluster."
+echo "----------------------------------------------------------------------------------------------------------------------"
+export AWS_ACCESS_KEY=$(aws configure get aws_access_key_id)
+export AWS_SECRET_ACCESS=$(aws configure get aws_secret_access_key)
+
+res1=$(curl --write-out "%{http_code}\n" --request POST  --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "http://$AWS_GITLAB_FQDN/api/v4/projects/2/variables" --form "key=AWS_ACCESS_KEY_ID" --form "value=$AWS_ACCESS_KEY" --output /dev/null --silent)
+if [ $res1=="201" ]; then
+  echo "Added CI/CD variable - AWS_ACCESS_KEY "
+else
+  echo "Failed to add CI/CD variable - AWS_ACCESS_KEY"
+  echo "Failure Code: $res1"
+fi
+sleep 1
+
+res2=$(curl --write-out "%{http_code}\n" --request POST  --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "http://$AWS_GITLAB_FQDN/api/v4/projects/2/variables" --form "key=AWS_SECRET_ACCESS_KEY" --form "value=$AWS_SECRET_ACCESS" --output /dev/null --silent)
+if [ $res2=="201" ]; then
+  echo "Added CI/CD variable - AWS_SECRET_ACCESS"
+else
+  echo "Failed to add CI/CD variable - AWS_SECRET_ACCESS"
+  echo "Failure Code: $res2"
+fi
+sleep 1
+
+res3=$(curl --write-out "%{http_code}\n" --request POST  --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "http://$AWS_GITLAB_FQDN/api/v4/projects/2/variables" --form "key=AWS_DEFAULT_REGION" --form "value=$AWS_REGION" --output /dev/null --silent)
+if [ $res3=="201" ]; then
+  echo "Added CI/CD variable - AWS_REGION"
+else
+  echo "Failed to add CI/CD variable - AWS_REGION"
+  echo "Failure Code: $res3"
+fi
+sleep 1
+
+res4=$(curl --write-out "%{http_code}\n" --request POST  --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "http://$AWS_GITLAB_FQDN/api/v4/projects/2/variables" --form "key=DOCKER_REGISTRY" --form "value=$DOCKER_REGISTRY" --output /dev/null --silent)
+if [ $res4=="201" ]; then
+  echo "Added CI/CD variable - DOCKER_REGISTRY"
+else
+  echo "Failed to add CI/CD variable - DOCKER_REGISTRY"
+  echo "Failure Code: $res4"
+fi
+sleep 1
+
+echo " "
+
+#Set up the private Git Client Repo
+sleep 2
+echo "###########################################################################"
+echo "## Step 6: Set up your local repo on cloud9 instance and point it to your private Front End GitLab project"
+echo "###########################################################################"
+echo "-------------------------------------------------------------------------------------------------------"
+cd /home/ec2-user/environment
+git clone https://github.com/amansin0504/front-end.git Sock-Shop-Front-End --quiet
+success=$?
+if [[ $success -eq 0 ]];
+then
+  cd Sock-Shop-Front-End
+  echo "INFO: Setting the credentials"
+  git config --global user.name "Administrator" && git config --global user.email "admin@cloudnativeapp.com"
+  echo "INFO: Setting the origin"
+  git remote rm origin && git remote add origin http://Administrator:$GITLAB_TOKEN@$AWS_GITLAB_FQDN/root/front-end.git
+  echo "INFO: Pushing the update to remote"
+  git push -u origin --all --quiet
+  echo " "
+  echo "-------------------------------------------------------------------------------"
+  echo "Sock-Shop-Front-End local and remote repo (on private GitLab Instance) created"
+  echo "-------------------------------------------------------------------------------"
+  echo " "
+else
+    echo "Something went wrong with cloning sock shop repo or it already exists!"
+fi
+echo " "
+
+
+#Add the Sock Shop credentials and display the access link
+sleep 2
+echo "###########################################################################"
+echo "## Step 8: Access the Sock Shop application on EKS"
+echo "###########################################################################"
+echo "export SOCK_SHOP_ELB=`kubectl get service front-end -n sock-shop -o json | jq -r '.status.loadBalancer.ingress[0].hostname'`" >> ~/.bashrc_lab
+echo "---------------------------------------------------------------------"
+source ~/.bashrc
+echo -e "Sock Shop Access: \e[32mhttp://$SOCK_SHOP_ELB\e[0m"
+COOKIE_JAR=.cookies-`python -c "import time; print(int(time.time()*1000))"`.txt
+result1=$(curl --silent --output /dev/null -c ${COOKIE_JAR} -d '{"username":"'${POD_NAME}'","password":"'${POD_NAME}'","email":"'${POD_NAME}'@email.address","firstName":"Lab","lastName":"User"}' -H "Content-Type: application/json" ${SOCK_SHOP_ELB}/register)
+result2=$(curl --silent --output /dev/null -b ${COOKIE_JAR} -c ${COOKIE_JAR} -d '{"number":"170","street":"W Tasman Dr","city":"San Jose","postcode":"95134","country":"United States"}' -H "Content-Type: application/json" ${SOCK_SHOP_ELB}/addresses)
+result3=$(curl --silent --output /dev/null -b ${COOKIE_JAR} -c ${COOKIE_JAR} -d '{"longNum":"1234123412341234","expires":"01/01","ccv":"123"}' -H "Content-Type: application/json" ${SOCK_SHOP_ELB}/cards)
+rm ${COOKIE_JAR}
+echo "-------------------Sock Shop Credentials-----------------------------"
+if [ $result1=="200" ] && [ $result2=="200" ] && [ $result3=="200" ]; then
+  echo "Username: ${POD_NAME}"
+  echo "Password: ${POD_NAME}"
+else
+  echo "Unable to add user now, try running the CLI in few mins - addshopuser"
+fi
+echo "---------------------------------------------------------------------"
+
+#Create load test application
+sleep 2
+echo "###########################################################################"
+echo "## Step 7: Deploy the load test application"
+echo "###########################################################################"
+kubectl create namespace sock-shop-test
+envsubst <$LAB/sock-shop/sock-shop-test.yaml | kubectl apply -f -
+echo " "
+kubectl config set-context --current --namespace=sock-shop
+
+echo "
+
+Execute the following command to complete the solution:
+
+   source ~/.bashrc
+
+"
